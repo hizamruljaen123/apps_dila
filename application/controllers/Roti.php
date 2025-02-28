@@ -18,18 +18,34 @@ class Roti extends CI_Controller {
         $potensi_counts = ['Tidak Laris' => 0, 'Sedang' => 0, 'Laris' => 0, 'Sangat Laris' => 0];
 
         foreach ($data['roti'] as &$r) {
-            $r->potensi = $this->calculate_fuzzy($r->stok, $r->terjual, $r->sisa, $r->harga, $r->pembeli, $r->tanggal);
+            // Verifikasi data
+            $r->stok = max(1, intval($r->stok)); // Pastikan stok minimal 1 untuk menghindari division by zero
+            $r->terjual = min(intval($r->terjual), $r->stok); // Terjual tidak boleh lebih dari stok
+            $r->sisa = $r->stok - $r->terjual; // Hitung ulang sisa untuk memastikan konsistensi
+            
+            // Hitung persentase terjual
+            $persentase_terjual = ($r->terjual / $r->stok) * 100;
+            $r->persentase_terjual = round($persentase_terjual, 2);
+            
+            // Panggil fuzzy dengan data yang sudah diverifikasi
+            $r->potensi = $this->calculate_fuzzy($r->stok, $r->terjual, $r->sisa, $r->harga, $r->pembeli, $r->tanggal, $persentase_terjual);
+            
+            // Akumulasi untuk statistik
             $total_stok += $r->stok;
             $total_terjual += $r->terjual;
 
-            // Kategorikan potensi penjualan berdasarkan nilai crisp dengan rentang lebih jelas
-            if ($r->potensi <= 20) {
+            // Kategorikan potensi penjualan berdasarkan nilai crisp
+            if ($r->potensi <= 25) {
+                $r->kategori = 'Tidak Laris';
                 $potensi_counts['Tidak Laris']++;
-            } elseif ($r->potensi <= 45) {
+            } elseif ($r->potensi <= 50) {
+                $r->kategori = 'Sedang';
                 $potensi_counts['Sedang']++;
-            } elseif ($r->potensi <= 70) {
+            } elseif ($r->potensi <= 75) {
+                $r->kategori = 'Laris';
                 $potensi_counts['Laris']++;
             } else {
+                $r->kategori = 'Sangat Laris';
                 $potensi_counts['Sangat Laris']++;
             }
         }
@@ -48,11 +64,15 @@ class Roti extends CI_Controller {
     // Form tambah roti
     public function create() {
         if ($this->input->post()) {
+            $stok = max(1, intval($this->input->post('stok')));
+            $terjual = min(intval($this->input->post('terjual')), $stok);
+            $sisa = $stok - $terjual;
+            
             $data = [
                 'nama' => $this->input->post('nama'),
-                'stok' => $this->input->post('stok'),
-                'terjual' => $this->input->post('terjual'),
-                'sisa' => $this->input->post('sisa'),
+                'stok' => $stok,
+                'terjual' => $terjual,
+                'sisa' => $sisa,
                 'harga' => $this->input->post('harga'),
                 'pembeli' => $this->input->post('pembeli'),
                 'tanggal' => $this->input->post('tanggal')
@@ -67,11 +87,15 @@ class Roti extends CI_Controller {
     public function edit($id) {
         $data['roti'] = $this->Roti_model->get_roti_by_id($id);
         if ($this->input->post()) {
+            $stok = max(1, intval($this->input->post('stok')));
+            $terjual = min(intval($this->input->post('terjual')), $stok);
+            $sisa = $stok - $terjual;
+            
             $update_data = [
                 'nama' => $this->input->post('nama'),
-                'stok' => $this->input->post('stok'),
-                'terjual' => $this->input->post('terjual'),
-                'sisa' => $this->input->post('sisa'),
+                'stok' => $stok,
+                'terjual' => $terjual,
+                'sisa' => $sisa,
                 'harga' => $this->input->post('harga'),
                 'pembeli' => $this->input->post('pembeli'),
                 'tanggal' => $this->input->post('tanggal')
@@ -166,40 +190,53 @@ class Roti extends CI_Controller {
         redirect('roti/fuzzy_rules');
     }
 
-    // Implementasi Algoritma Fuzzy Mamdani yang Diperbarui Secara Menyeluruh
+    // Implementasi Algoritma Fuzzy Mamdani yang Diperbarui
     private function fuzzify($value, $variable_name) {
         $variables = $this->Roti_model->get_fuzzy_variables();
         $result = [];
         
+        // Logging untuk debugging
+        log_message('debug', "Fuzzifying variable: $variable_name with value: $value");
+        
         foreach ($variables as $var) {
             if ($var->nama == $variable_name) {
                 $membership = 0;
-                // Fungsi keanggotaan segitiga yang lebih fleksibel
-                if ($value < $var->batas_bawah) {
-                    $membership = 0;
-                } elseif ($value <= $var->batas_tengah) {
+                
+                // Perbaikan fungsi keanggotaan
+                if ($value <= $var->batas_bawah) {
+                    $membership = ($variable_name == 'Sisa' || $variable_name == 'PersentaseTerjual' && $var->kategori == 'Sangat Rendah') ? 1 : 0;
+                } elseif ($value < $var->batas_tengah) {
                     $membership = ($value - $var->batas_bawah) / ($var->batas_tengah - $var->batas_bawah);
-                } elseif ($value <= $var->batas_atas) {
+                } elseif ($value == $var->batas_tengah) {
+                    $membership = 1;
+                } elseif ($value < $var->batas_atas) {
                     $membership = ($var->batas_atas - $value) / ($var->batas_atas - $var->batas_tengah);
                 } else {
-                    $membership = 0;
+                    $membership = ($variable_name == 'Terjual' || $variable_name == 'PersentaseTerjual' && $var->kategori == 'Sangat Tinggi') ? 1 : 0;
                 }
+                
                 $result[$var->kategori] = max(0, min(1, $membership));
+                log_message('debug', "Variable: $variable_name, Category: {$var->kategori}, Membership: $membership");
             }
         }
-        // Pastikan selalu ada nilai untuk semua kategori
+        
+        // Pastikan semua kategori ada dengan nilai default 0
         $default_categories = ['Sangat Rendah' => 0, 'Rendah' => 0, 'Sedang' => 0, 'Tinggi' => 0, 'Sangat Tinggi' => 0];
-        return array_merge($default_categories, $result);
+        $result = array_merge($default_categories, $result);
+        
+        log_message('debug', "Fuzzify result for $variable_name: " . json_encode($result));
+        
+        return $result;
     }
 
-    private function evaluate_rules($stok_fuzzy, $terjual_fuzzy, $sisa_fuzzy, $harga_fuzzy, $pembeli_fuzzy, $tanggal_fuzzy) {
+    private function evaluate_rules($stok_fuzzy, $terjual_fuzzy, $sisa_fuzzy, $harga_fuzzy, $pembeli_fuzzy, $tanggal_fuzzy, $persentase_fuzzy) {
         $rules = $this->Roti_model->get_fuzzy_rules();
         $output = ['Tidak Laris' => 0, 'Sedang' => 0, 'Laris' => 0, 'Sangat Laris' => 0];
-
+    
         foreach ($rules as $rule) {
             $conditions = explode(' AND ', $rule->kondisi);
             $min_value = 1;
-
+    
             foreach ($conditions as $cond) {
                 $parts = explode(' ', trim($cond));
                 $var = $parts[0];
@@ -217,56 +254,107 @@ class Roti extends CI_Controller {
                     $min_value = min($min_value, $pembeli_fuzzy[$cat] ?? 0);
                 } elseif ($var == 'Tanggal') {
                     $min_value = min($min_value, $tanggal_fuzzy[$cat] ?? 0);
+                } elseif ($var == 'PersentaseTerjual') {
+                    $min_value = min($min_value, $persentase_fuzzy[$cat] ?? 0);
                 }
             }
-            // Pastikan nilai minimum tidak terlalu tinggi untuk menghindari bias
-            $min_value = max(0, min(1, $min_value));
-            $output[$rule->output] = max($output[$rule->output], $min_value);
-        }
-        // Normalisasi output agar distribusi lebih merata
-        $total = array_sum($output);
-        if ($total > 0) {
-            foreach ($output as &$value) {
-                $value = $value / $total;
+            
+            // Jika semua kondisi terpenuhi (min_value > 0)
+            if ($min_value > 0) {
+                $output[$rule->output] = max($output[$rule->output], $min_value);
+                log_message('debug', "Rule fired: {$rule->kondisi} -> {$rule->output}, Value: $min_value");
             }
         }
+        
+        log_message('debug', 'Aggregated output: ' . json_encode($output));
         return $output;
     }
 
     private function defuzzify($output) {
+        // Centroids diatur lebih seimbang untuk membedakan kategori dengan jelas
         $centroids = [
-            'Tidak Laris' => 10,
-            'Sedang' => 35,
-            'Laris' => 65,
-            'Sangat Laris' => 90
+            'Tidak Laris' => 12.5,  // Center of 0-25 range
+            'Sedang' => 37.5,       // Center of 25-50 range
+            'Laris' => 62.5,        // Center of 50-75 range
+            'Sangat Laris' => 87.5  // Center of 75-100 range
         ];
+        
         $numerator = 0;
         $denominator = 0;
-
+    
         foreach ($centroids as $category => $centroid) {
             $value = $output[$category] ?? 0;
             $numerator += $centroid * $value;
             $denominator += $value;
+            
+            log_message('debug', "Defuzzify: Category $category, Value $value, Centroid $centroid");
         }
-
-        return $denominator > 0 ? $numerator / $denominator : 0;
+    
+        // Jika tidak ada rule yang terpicu, gunakan nilai default berdasarkan persentase penjualan
+        $crisp_value = $denominator > 0 ? $numerator / $denominator : 0;
+        
+        log_message('debug', "Final crisp value: $crisp_value");
+        return $crisp_value;
     }
 
-    private function calculate_fuzzy($stok, $terjual, $sisa, $harga, $pembeli, $tanggal) {
-        // Fuzzifikasi semua variabel
+    private function calculate_fuzzy($stok, $terjual, $sisa, $harga, $pembeli, $tanggal, $persentase_terjual) {
+        // Verifikasi data
+        $stok = max(1, intval($stok));
+        $terjual = min(intval($terjual), $stok);
+        $sisa = intval($sisa);
+        $harga = floatval($harga);
+        $pembeli = intval($pembeli);
+        
+        // Pastikan persentase valid
+        $persentase_terjual = min(100, max(0, $persentase_terjual));
+        
+        // Logging untuk debug
+        log_message('debug', "Calculate fuzzy for: Stok=$stok, Terjual=$terjual, Sisa=$sisa, Persentase=$persentase_terjual");
+        
+        // Fuzzify all input variables
         $stok_fuzzy = $this->fuzzify($stok, 'Stok');
         $terjual_fuzzy = $this->fuzzify($terjual, 'Terjual');
         $sisa_fuzzy = $this->fuzzify($sisa, 'Sisa');
         $harga_fuzzy = $this->fuzzify($harga, 'Harga');
         $pembeli_fuzzy = $this->fuzzify($pembeli, 'Pembeli');
         
-        // Konversi tanggal ke hari dalam seminggu (1 = Senin, 7 = Minggu)
+        // Fuzzify tanggal (day of week)
         $tanggal_obj = new DateTime($tanggal);
-        $hari = $tanggal_obj->format('N'); // 1-7
+        $hari = $tanggal_obj->format('N'); // 1 (Monday) to 7 (Sunday)
         $tanggal_fuzzy = $this->fuzzify($hari, 'Tanggal');
-
-        // Evaluasi aturan dengan semua variabel
-        $output = $this->evaluate_rules($stok_fuzzy, $terjual_fuzzy, $sisa_fuzzy, $harga_fuzzy, $pembeli_fuzzy, $tanggal_fuzzy);
+        
+        // Fuzzify persentase terjual (penting untuk menentukan popularitas)
+        $persentase_fuzzy = $this->fuzzify($persentase_terjual, 'PersentaseTerjual');
+        
+        // Rule evaluation
+        $output = $this->evaluate_rules(
+            $stok_fuzzy, 
+            $terjual_fuzzy, 
+            $sisa_fuzzy, 
+            $harga_fuzzy, 
+            $pembeli_fuzzy, 
+            $tanggal_fuzzy, 
+            $persentase_fuzzy
+        );
+        
+        // Jika tidak ada rule yang terpicu, gunakan default berdasarkan persentase
+        $sum_output = array_sum($output);
+        if ($sum_output < 0.01) {
+            log_message('debug', "No rules fired, using percentage-based fallback");
+            
+            // Default mapping berdasarkan persentase penjualan
+            if ($persentase_terjual < 25) {
+                return 12.5; // Tidak Laris
+            } elseif ($persentase_terjual < 50) {
+                return 37.5; // Sedang
+            } elseif ($persentase_terjual < 75) {
+                return 62.5; // Laris
+            } else {
+                return 87.5; // Sangat Laris
+            }
+        }
+        
+        // Defuzzification
         return $this->defuzzify($output);
     }
 }
