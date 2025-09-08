@@ -1,72 +1,75 @@
-# Bread Sales Classification Using Fuzzy Tsukamoto (PHP)
+Fuzzy Tsukamoto for Bread Sales Classification
+=============================================
 
-This example demonstrates how to classify **bread sales** into categories like **Low, Medium, High** using the **Fuzzy Tsukamoto** method in PHP.
+Overview
+--------
+This project implements the **Fuzzy Tsukamoto algorithm** to classify bread sales levels
+(Low, Medium, High) based on factors such as **demand**, **price**, and **production capacity**.
+The implementation is done in **PHP** for integration with web-based applications.
 
----
+Algorithm Steps
+---------------
+1. **Define Fuzzy Sets**:
+   - Input variables: `Demand`, `Price`, `ProductionCapacity`
+   - Each variable has membership functions (e.g., Low, Medium, High)
 
-## Steps Overview
+2. **Fuzzification**:
+   - Convert crisp inputs into fuzzy values using membership functions.
 
-1. **Define Input Variables**
-   - Example inputs: `daily_customers`, `stock_level`
-   - Each input has fuzzy sets:
-     - `daily_customers`: Low, Medium, High  
-     - `stock_level`: Low, Medium, High
+3. **Rule Base**:
+   - Define IF-THEN rules. Example:
+     - IF Demand is High AND Price is Low THEN Sales is High
+     - IF Demand is Low OR Price is High THEN Sales is Low
 
-2. **Fuzzification**
-   - Convert crisp input values to **membership degrees** for each fuzzy set using linear membership functions.
+4. **Inference (Tsukamoto Method)**:
+   - Use the **minimum operator** for AND rules and **maximum** for OR rules.
+   - Each rule produces a **crisp output** proportional to its degree of membership.
 
-3. **Rule Evaluation**
-   - Example rules:
-     - IF daily_customers is High AND stock_level is Low THEN sales_category is High  
-     - IF daily_customers is Low AND stock_level is High THEN sales_category is Low  
+5. **Defuzzification**:
+   - Compute weighted average of all crisp outputs to get final classification.
 
-4. **Defuzzification (Tsukamoto Method)**
-   - Compute output using **weighted average** of rule outputs based on their membership values.
+PHP Implementation (Example)
+----------------------------
+.. code-block:: php
 
----
+    <?php
+    // Membership functions
+    function low($x, $min, $max) {
+        if ($x <= $min) return 1;
+        if ($x >= $max) return 0;
+        return ($max - $x)/($max - $min);
+    }
 
-## PHP Example (Simplified)
+    function high($x, $min, $max) {
+        if ($x <= $min) return 0;
+        if ($x >= $max) return 1;
+        return ($x - $min)/($max - $min);
+    }
 
-```php
-<?php
+    // Example input
+    $demand = 80; // percentage
+    $price = 20;  // dollars
+    $capacity = 50; // units
 
-// Membership functions
-function low($x, $a, $b) {
-    if($x <= $a) return 1;
-    elseif($x >= $b) return 0;
-    else return ($b - $x) / ($b - $a);
-}
+    // Fuzzification
+    $demandHigh = high($demand, 50, 100);
+    $priceLow = low($price, 10, 30);
+    $capacityHigh = high($capacity, 30, 70);
 
-function high($x, $a, $b) {
-    if($x <= $a) return 0;
-    elseif($x >= $b) return 1;
-    else return ($x - $a) / ($b - $a);
-}
+    // Rule evaluation (AND using min)
+    $rule1 = min($demandHigh, $priceLow); // Sales High
+    $rule2 = min(1 - $demandHigh, 1 - $capacityHigh); // Sales Low
 
-// Example inputs
-$daily_customers = 120;
-$stock_level = 50;
+    // Tsukamoto defuzzification
+    $salesHigh = $rule1 * 90; // 90 units
+    $salesLow = $rule2 * 30;  // 30 units
 
-// Fuzzification
-$customers_low = low($daily_customers, 50, 100);
-$customers_high = high($daily_customers, 100, 150);
+    $finalSales = ($salesHigh + $salesLow)/($rule1 + $rule2);
+    echo "Predicted Sales: " . round($finalSales) . " units";
+    ?>
 
-$stock_low = low($stock_level, 20, 50);
-$stock_high = high($stock_level, 50, 100);
-
-// Rule evaluation (simplified)
-$rule1 = min($customers_high, $stock_low); // High sales
-$rule2 = min($customers_low, $stock_high); // Low sales
-
-// Tsukamoto defuzzification
-$sales_high = 150; // crisp output for High
-$sales_low = 50;   // crisp output for Low
-
-$numerator = ($rule1 * $sales_high) + ($rule2 * $sales_low);
-$denominator = $rule1 + $rule2;
-
-$sales_category = $numerator / $denominator;
-
-echo "Predicted Sales: ".$sales_category;
-
-?>
+Notes
+-----
+- The membership functions can be **triangular or trapezoidal**.  
+- Tsukamoto method requires each rule to produce a **crisp output**.  
+- PHP can be used to integrate this logic into web dashboards for **real-time bread sales prediction**.  
