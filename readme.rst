@@ -1,68 +1,72 @@
-# Bread Sales Classification Using Fuzzy Tsukamoto Method
+# Bread Sales Classification Using Fuzzy Tsukamoto (PHP)
 
-This project demonstrates how to classify bread sales into categories like **Low, Medium, High** using the **Fuzzy Tsukamoto method**.
+This example demonstrates how to classify **bread sales** into categories like **Low, Medium, High** using the **Fuzzy Tsukamoto** method in PHP.
 
 ---
 
 ## Steps Overview
 
-1. **Define Input Variables**  
-   - `temperature` (°C)  
-   - `day_of_week` (1–7)  
-   - `promotion` (0–1)
+1. **Define Input Variables**
+   - Example inputs: `daily_customers`, `stock_level`
+   - Each input has fuzzy sets:
+     - `daily_customers`: Low, Medium, High  
+     - `stock_level`: Low, Medium, High
 
-2. **Define Output Variable**  
-   - `sales` categorized as Low, Medium, High
+2. **Fuzzification**
+   - Convert crisp input values to **membership degrees** for each fuzzy set using linear membership functions.
 
-3. **Fuzzification**  
-   - Convert crisp input values to **membership values** using fuzzy sets.  
-   - Example membership functions:
-     - Temperature: Cold, Normal, Hot  
-     - Promotion: None, Small, Large  
-
-4. **Rule Base**  
+3. **Rule Evaluation**
    - Example rules:
-     - IF temperature IS Hot AND promotion IS Large THEN sales IS High  
-     - IF temperature IS Cold AND promotion IS None THEN sales IS Low
+     - IF daily_customers is High AND stock_level is Low THEN sales_category is High  
+     - IF daily_customers is Low AND stock_level is High THEN sales_category is Low  
 
-5. **Inference using Tsukamoto Method**  
-   - Each rule produces an output fuzzy set with a monotonic membership function.  
-   - Weighted average of outputs produces final crisp value (defuzzification).
-
-6. **Defuzzification**  
-   - Use **weighted average** of all rule outputs to get the final sales prediction.
+4. **Defuzzification (Tsukamoto Method)**
+   - Compute output using **weighted average** of rule outputs based on their membership values.
 
 ---
 
-## Python Example (Simplified)
+## PHP Example (Simplified)
 
-```python
-import numpy as np
+```php
+<?php
 
-# Membership functions
-def cold_temp(x): return max(0, min(1, (20-x)/10))
-def normal_temp(x): return max(0, min((x-15)/5, (25-x)/5))
-def hot_temp(x): return max(0, min(1, (x-20)/10))
+// Membership functions
+function low($x, $a, $b) {
+    if($x <= $a) return 1;
+    elseif($x >= $b) return 0;
+    else return ($b - $x) / ($b - $a);
+}
 
-def low_promo(x): return max(0, min(1, (0.5-x)/0.5))
-def high_promo(x): return max(0, min(1, (x-0.5)/0.5))
+function high($x, $a, $b) {
+    if($x <= $a) return 0;
+    elseif($x >= $b) return 1;
+    else return ($x - $a) / ($b - $a);
+}
 
-# Tsukamoto inference function
-def tsukamoto_inference(temp, promo):
-    # Rule 1: IF temp IS hot AND promo IS high THEN sales IS High
-    alpha1 = min(hot_temp(temp), high_promo(promo))
-    z1 = 100 - alpha1*(100-70)  # example mapping crisp output
-    
-    # Rule 2: IF temp IS cold AND promo IS low THEN sales IS Low
-    alpha2 = min(cold_temp(temp), low_promo(promo))
-    z2 = alpha2*30 + (1-alpha2)*50  # example mapping crisp output
-    
-    # Weighted average
-    final_sales = (alpha1*z1 + alpha2*z2) / (alpha1 + alpha2 + 1e-6)
-    return final_sales
+// Example inputs
+$daily_customers = 120;
+$stock_level = 50;
 
-# Example usage
-temperature = 22  # °C
-promotion = 0.7   # normalized 0-1
-sales_prediction = tsukamoto_inference(temperature, promotion)
-print(f"Predicted bread sales: {sales_prediction:.2f}")
+// Fuzzification
+$customers_low = low($daily_customers, 50, 100);
+$customers_high = high($daily_customers, 100, 150);
+
+$stock_low = low($stock_level, 20, 50);
+$stock_high = high($stock_level, 50, 100);
+
+// Rule evaluation (simplified)
+$rule1 = min($customers_high, $stock_low); // High sales
+$rule2 = min($customers_low, $stock_high); // Low sales
+
+// Tsukamoto defuzzification
+$sales_high = 150; // crisp output for High
+$sales_low = 50;   // crisp output for Low
+
+$numerator = ($rule1 * $sales_high) + ($rule2 * $sales_low);
+$denominator = $rule1 + $rule2;
+
+$sales_category = $numerator / $denominator;
+
+echo "Predicted Sales: ".$sales_category;
+
+?>
