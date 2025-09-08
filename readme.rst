@@ -1,71 +1,68 @@
-###################
-What is CodeIgniter
-###################
+# Bread Sales Classification Using Fuzzy Tsukamoto Method
 
-CodeIgniter is an Application Development Framework - a toolkit - for people
-who build web sites using PHP. Its goal is to enable you to develop projects
-much faster than you could if you were writing code from scratch, by providing
-a rich set of libraries for commonly needed tasks, as well as a simple
-interface and logical structure to access these libraries. CodeIgniter lets
-you creatively focus on your project by minimizing the amount of code needed
-for a given task.
+This project demonstrates how to classify bread sales into categories like **Low, Medium, High** using the **Fuzzy Tsukamoto method**.
 
-*******************
-Release Information
-*******************
+---
 
-This repo contains in-development code for future releases. To download the
-latest stable release please visit the `CodeIgniter Downloads
-<https://codeigniter.com/download>`_ page.
+## Steps Overview
 
-**************************
-Changelog and New Features
-**************************
+1. **Define Input Variables**  
+   - `temperature` (°C)  
+   - `day_of_week` (1–7)  
+   - `promotion` (0–1)
 
-You can find a list of all changes for each release in the `user
-guide change log <https://github.com/bcit-ci/CodeIgniter/blob/develop/user_guide_src/source/changelog.rst>`_.
+2. **Define Output Variable**  
+   - `sales` categorized as Low, Medium, High
 
-*******************
-Server Requirements
-*******************
+3. **Fuzzification**  
+   - Convert crisp input values to **membership values** using fuzzy sets.  
+   - Example membership functions:
+     - Temperature: Cold, Normal, Hot  
+     - Promotion: None, Small, Large  
 
-PHP version 5.6 or newer is recommended.
+4. **Rule Base**  
+   - Example rules:
+     - IF temperature IS Hot AND promotion IS Large THEN sales IS High  
+     - IF temperature IS Cold AND promotion IS None THEN sales IS Low
 
-It should work on 5.3.7 as well, but we strongly advise you NOT to run
-such old versions of PHP, because of potential security and performance
-issues, as well as missing features.
+5. **Inference using Tsukamoto Method**  
+   - Each rule produces an output fuzzy set with a monotonic membership function.  
+   - Weighted average of outputs produces final crisp value (defuzzification).
 
-************
-Installation
-************
+6. **Defuzzification**  
+   - Use **weighted average** of all rule outputs to get the final sales prediction.
 
-Please see the `installation section <https://codeigniter.com/userguide3/installation/index.html>`_
-of the CodeIgniter User Guide.
+---
 
-*******
-License
-*******
+## Python Example (Simplified)
 
-Please see the `license
-agreement <https://github.com/bcit-ci/CodeIgniter/blob/develop/user_guide_src/source/license.rst>`_.
+```python
+import numpy as np
 
-*********
-Resources
-*********
+# Membership functions
+def cold_temp(x): return max(0, min(1, (20-x)/10))
+def normal_temp(x): return max(0, min((x-15)/5, (25-x)/5))
+def hot_temp(x): return max(0, min(1, (x-20)/10))
 
--  `User Guide <https://codeigniter.com/docs>`_
--  `Contributing Guide <https://github.com/bcit-ci/CodeIgniter/blob/develop/contributing.md>`_
--  `Language File Translations <https://github.com/bcit-ci/codeigniter3-translations>`_
--  `Community Forums <http://forum.codeigniter.com/>`_
--  `Community Wiki <https://github.com/bcit-ci/CodeIgniter/wiki>`_
--  `Community Slack Channel <https://codeigniterchat.slack.com>`_
+def low_promo(x): return max(0, min(1, (0.5-x)/0.5))
+def high_promo(x): return max(0, min(1, (x-0.5)/0.5))
 
-Report security issues to our `Security Panel <mailto:security@codeigniter.com>`_
-or via our `page on HackerOne <https://hackerone.com/codeigniter>`_, thank you.
+# Tsukamoto inference function
+def tsukamoto_inference(temp, promo):
+    # Rule 1: IF temp IS hot AND promo IS high THEN sales IS High
+    alpha1 = min(hot_temp(temp), high_promo(promo))
+    z1 = 100 - alpha1*(100-70)  # example mapping crisp output
+    
+    # Rule 2: IF temp IS cold AND promo IS low THEN sales IS Low
+    alpha2 = min(cold_temp(temp), low_promo(promo))
+    z2 = alpha2*30 + (1-alpha2)*50  # example mapping crisp output
+    
+    # Weighted average
+    final_sales = (alpha1*z1 + alpha2*z2) / (alpha1 + alpha2 + 1e-6)
+    return final_sales
 
-***************
-Acknowledgement
-***************
-
-The CodeIgniter team would like to thank EllisLab, all the
-contributors to the CodeIgniter project and you, the CodeIgniter user.
+# Example usage
+temperature = 22  # °C
+promotion = 0.7   # normalized 0-1
+sales_prediction = tsukamoto_inference(temperature, promotion)
+print(f"Predicted bread sales: {sales_prediction:.2f}")
